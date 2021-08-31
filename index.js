@@ -37,13 +37,59 @@ async function getAccessTokenCore() {
 
 let tokenPromise;
 async function getAccessToken() {
-  if (tokenPromise && (await tokenPromise).expiry > Date.now())
-    return (await tokenPromise).token;
-  return (tokenPromise = getAccessTokenCore());
+  if (!tokenPromise || (await tokenPromise).expiry <= Date.now() + 500)
+    tokenPromise = getAccessTokenCore();
+  return (await tokenPromise).token;
+}
+
+async function getEndpoint(route) {
+  const accessToken = await getAccessToken();
+  const resp = await fetch(`${CURB_URL}${route}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+  return await resp.json();
+}
+
+async function getLocations() {
+  return getEndpoint("/api/v3/locations");
+}
+
+async function getLatest(locationId) {
+  return getEndpoint(`/api/v3/latest/${locationId}`);
+}
+
+async function getAggregate(locationId, rangeId, resolution) {
+  return getEndpoint(
+    `/api/v3/aggregate/${locationId}/${rangeId}/${resolution}`
+  );
 }
 
 app.get("/", (req, res) =>
-  res.send({ CURB_CLIENT_ID, CURB_CLIENT_SECRET, CURB_EMAIL, CURB_PASSWORD })
+  res.send(`
+    <a href="/locations">Locations</a>
+    <br/>
+    <a href="/latest">Latest</a>
+    <br/>
+    <a href="/aggregate">Aggregate</a>
+  `)
 );
+
+app.get("/locations", async (req, res) => res.send(await getLocations()));
+
+app.get("/latest", async (req, res) => {
+  const locationId = req.query.target;
+  if (!locationId) res.status(400).send("target parameter required");
+  else res.send(await getLatest(locationId));
+});
+
+app.get("/aggregate", async (req, res) => {
+  const { target: locationId, range: rangeId, res: resolution } = req.query;
+  if (!locationId || !rangeId || !resolution)
+    res.status(400).send("target, range, and res parameters required");
+  else res.send(await getAggregate(locationId, rangeId, resolution));
+});
 
 app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
