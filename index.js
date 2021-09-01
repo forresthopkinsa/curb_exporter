@@ -2,7 +2,9 @@ require("dotenv").config();
 
 const express = require("express");
 const fetch = require("node-fetch");
+const prom = require("prom-client");
 
+const CACHE_EXPIRY = 10_000;
 const PORT = process.env.PORT ?? 3000;
 const CURB_URL = "https://app.energycurb.com";
 const { CURB_CLIENT_ID, CURB_CLIENT_SECRET, CURB_EMAIL, CURB_PASSWORD } =
@@ -10,6 +12,58 @@ const { CURB_CLIENT_ID, CURB_CLIENT_SECRET, CURB_EMAIL, CURB_PASSWORD } =
 
 const app = express();
 app.use(express.json());
+
+prom.collectDefaultMetrics();
+
+/*
+key: string
+arr: { val: any, ...labels }[]
+doc?: { help: string, type: "counter" | "gauge" | "histogram" | "summary" }
+*/
+function createMetricString(key, arr, doc) {
+  let str = "";
+  if (doc) {
+    str += `# HELP ${key} ${doc.help}\n`;
+    str += `# TYPE ${key} ${doc.type}\n`;
+  }
+  for (const { val, ...labels } of arr) {
+    const labelEntries = Object.entries(labels);
+    const labelStr =
+      labelEntries.length &&
+      labelEntries
+        .reduce((acc, [k, v]) => (acc += `,${k}="${v}"`), "")
+        .slice(1);
+    str += `${key}${labelStr ? `{${labelStr}}` : ""} ${val}\n`;
+  }
+  return str.trim();
+}
+
+function dtoToMetrics(obj) {
+  return `${createMetricString(
+    "curb_consumption_watts",
+    [{ val: obj.consumption }],
+    { help: "The current household energy consumption.", type: "gauge" }
+  )}
+${createMetricString("curb_production_watts", [{ val: -obj.production }], {
+  help: "The current household energy production.",
+  type: "gauge",
+})}
+${createMetricString("curb_storage_watts", [{ val: obj.storage }], {
+  help: "The current household energy storage.",
+  type: "gauge",
+})}
+${createMetricString(
+  "curb_circuit_consumption_watts",
+  obj.circuits.map(({ w, ...rest }) => ({
+    val: w,
+    ...rest,
+  })),
+  {
+    help: "Individual circuit consumption levels. Negative for production circuits.",
+    type: "gauge",
+  }
+)}`;
+}
 
 async function getAccessTokenCore() {
   console.log("Fetching new access token...");
@@ -42,7 +96,8 @@ async function getAccessToken() {
   return (await tokenPromise).token;
 }
 
-async function getEndpoint(route) {
+async function getEndpointCore(route) {
+  console.log(`Getting ${route}`);
   const accessToken = await getAccessToken();
   const resp = await fetch(`${CURB_URL}${route}`, {
     headers: {
@@ -50,7 +105,14 @@ async function getEndpoint(route) {
       "Content-Type": "application/json",
     },
   });
-  return await resp.json();
+  return { data: await resp.json(), expiry: Date.now() + CACHE_EXPIRY };
+}
+
+const apiCache = {};
+async function getEndpoint(route) {
+  if (!apiCache[route] || (await apiCache[route]).expiry <= Date.now())
+    apiCache[route] = getEndpointCore(route);
+  return (await apiCache[route]).data;
 }
 
 async function getLocations() {
@@ -82,7 +144,10 @@ app.get("/locations", async (req, res) => res.send(await getLocations()));
 app.get("/latest", async (req, res) => {
   const locationId = req.query.target;
   if (!locationId) res.status(400).send("target parameter required");
-  else res.send(await getLatest(locationId));
+  else
+    res
+      .set("Content-Type", "text/plain")
+      .send(dtoToMetrics(await getLatest(locationId)));
 });
 
 app.get("/aggregate", async (req, res) => {
@@ -90,6 +155,10 @@ app.get("/aggregate", async (req, res) => {
   if (!locationId || !rangeId || !resolution)
     res.status(400).send("target, range, and res parameters required");
   else res.send(await getAggregate(locationId, rangeId, resolution));
+});
+
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", "text/plain").send(await prom.register.metrics());
 });
 
 app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));

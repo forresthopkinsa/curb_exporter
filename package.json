@@ -5,10 +5,14 @@
   "author": "Forrest Hopkins <fhopkins404@gmail.com>",
   "license": "MIT",
   "private": true,
+  "scripts": {
+    "start": "nodemon"
+  },
   "dependencies": {
     "dotenv": "^10.0.0",
     "express": "^4.17.1",
-    "node-fetch": "^2.6.1"
+    "node-fetch": "^2.6.1",
+    "prom-client": "^13.2.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.12",
