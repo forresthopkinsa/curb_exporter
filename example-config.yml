@@ -1,0 +1,10 @@
+curb:
+  # CURB API client credentials
+  # See: https://github.com/Curb-v2/third-party-app-integration/blob/master/docs/api.md#obtaining-client-credentials
+  client:
+    id: iKAoRkr3qyFSnJSr3bodZRZZ6Hm3GqC3
+    secret: dSoqbfwujF72a1DhwmjnqP4VAiBTqFt3WLLUtnpGDmCf6_CMQms3WEy8DxCQR3KY
+  # CURB user account credentials
+  user:
+    email: your@email.com
+    password: yourPassword

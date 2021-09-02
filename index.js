@@ -1,17 +1,29 @@
-require("dotenv").config();
-
+const fs = require("fs");
 const express = require("express");
 const fetch = require("node-fetch");
 const prom = require("prom-client");
+const yaml = require("js-yaml");
+
+const config = yaml.load(fs.readFileSync(process.argv[2] ?? "config.yml"));
 
 const CACHE_EXPIRY = 10_000;
 const PORT = process.env.PORT ?? 3000;
 const CURB_URL = "https://app.energycurb.com";
-const { CURB_CLIENT_ID, CURB_CLIENT_SECRET, CURB_EMAIL, CURB_PASSWORD } =
-  process.env;
+const CURB_CLIENT_ID = config?.curb?.client?.id;
+const CURB_CLIENT_SECRET = config?.curb?.client?.secret;
+const CURB_EMAIL = config?.curb?.user?.email;
+const CURB_PASSWORD = config?.curb?.user?.password;
+
+if (!CURB_CLIENT_ID || !CURB_CLIENT_SECRET || !CURB_EMAIL || !CURB_PASSWORD)
+  throw new Error("Invalid configuration");
 
 const app = express();
 app.use(express.json());
+
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
 
 prom.collectDefaultMetrics();
 
@@ -66,7 +78,7 @@ ${createMetricString(
 }
 
 async function getAccessTokenCore() {
-  console.log("Fetching new access token...");
+  console.log("Fetching new access token");
   const body = {
     grant_type: "password",
     audience: "app.energycurb.com/api",
@@ -98,7 +110,6 @@ async function getAccessToken() {
 }
 
 async function getEndpointCore(route) {
-  console.log(`Getting ${route}`);
   const accessToken = await getAccessToken();
   const resp = await fetch(`${CURB_URL}${route}`, {
     headers: {
