@@ -98,7 +98,7 @@ async function getAccessTokenCore() {
   if (data.error) throw new Error(data.error);
   return {
     token: data.access_token,
-    expiry: new Date(Date.now() + data.expires_in),
+    expiry: new Date(Date.now() + data.expires_in * 1_000),
   };
 }
 
