@@ -83,6 +83,7 @@ async function getAccessTokenCore() {
     },
   });
   const data = await resp.json();
+  if (data.error) throw new Error(data.error);
   return {
     token: data.access_token,
     expiry: new Date(Date.now() + data.expires_in),
@@ -145,9 +146,14 @@ app.get("/latest", async (req, res) => {
   const locationId = req.query.target;
   if (!locationId) res.status(400).send("target parameter required");
   else
-    res
-      .set("Content-Type", "text/plain")
-      .send(dtoToMetrics(await getLatest(locationId)));
+    try {
+      res
+        .set("Content-Type", "text/plain")
+        .send(dtoToMetrics(await getLatest(locationId)));
+    } catch (e) {
+      console.error(e);
+      res.status(500).send(e.message);
+    }
 });
 
 app.get("/aggregate", async (req, res) => {
