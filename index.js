@@ -7,7 +7,7 @@ const yaml = require("js-yaml");
 const config = yaml.load(fs.readFileSync(process.argv[2] ?? "config.yml"));
 
 const CACHE_EXPIRY = 10_000;
-const PORT = process.env.PORT ?? 3000;
+const PORT = process.env.PORT ?? 9895;
 const CURB_URL = "https://app.energycurb.com";
 const CURB_CLIENT_ID = config?.curb?.client?.id;
 const CURB_CLIENT_SECRET = config?.curb?.client?.secret;
